@@ -4,7 +4,7 @@ import sys
 import operator
 import os
 
-## version 1.0.0
+## version 1.0.1
 ## email: alex.paul@wustl.edu
 
 # ------------------
@@ -32,6 +32,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--input', '-i', dest="input", help='input tsv file', required=True, action="store")
 parser.add_argument('--output', '-o', dest="output", help='output tsv file', required=True, action="store")
 parser.add_argument('--gnomad_tag_filter', dest="gnomad_filter", help="gnomAD filter tag, to remove 1.00 that bcftools fails to filter out..", required=False, action="store")
+parser.add_argument('--gnomad_af', dest="gnomad_af", help="gnomAD af to filter on", default="0.05", type=float, required=False, action="store")
+parser.add_argument('--depth_filter', dest="depth", help="required depth of proband call. if no proband specified(--proband_filter) all samples must exceed depth value", type=int, required=False, action="store")
 parser.add_argument('--proband_filter', dest="proband_filter", help="sample name to filter out hom ref calls", required=False, action="store")
 parser.add_argument('--add_zygosity', dest="add_zygosity", help="add zygosity column for each sample", action="store_true")
 parser.add_argument('--add_vaf', dest="add_vaf", help="add vaf column for each sample", action="store_true")
@@ -45,6 +47,8 @@ input_file_name  = args.input
 output_file_name = args.output
 move_to_front_columns = args.move_columns
 gnomad_filter = args.gnomad_filter
+gnomad_af = args.gnomad_af
+depth = args.depth
 add_zygosity = args.add_zygosity
 add_vaf = args.add_vaf
 proband_sample = args.proband_filter
@@ -122,14 +126,12 @@ with open(input_file_name, 'r') as file_in, open(tsv_output_file_name, 'w') as f
     for row in csv.DictReader(file_in, delimiter='\t'):
         # check if gnomad should be filtered and what tag..
         skip_row = False
-        # previous filtering tool passes gnomad freq of 1.0, this step removes those calls
+        # gnomad filtering
         if(gnomad_filter):
             gnomad_value = row[gnomad_filter]
-            if(gnomad_value == ''):
-                continue
             try:
-                gnomad_value = float(gnomad_value)
-                if(gnomad_value == 1):
+                gnomad = float(gnomad_value)
+                if(gnomad >= gnomad_af):
                     skip_row = True
                     continue
             except ValueError:
@@ -183,6 +185,23 @@ with open(input_file_name, 'r') as file_in, open(tsv_output_file_name, 'w') as f
             else:
                 row["db_pop_freq_max"] = ""
                 row["db_pop_freq_max_AF"] = ""
+
+        if(depth):
+            if(proband_sample):
+                try:
+                    sample_depth = int(row[proband_sample + ".DP"])
+                except ValueError:
+                    sample_depth = 0
+                if(sample_depth<=depth):
+                    skip_row = True
+            else:
+                for sample in samples:
+                    try:
+                        sample_depth = int(row[sample + ".DP"])
+                    except ValueError:
+                        sample_depth = 0
+                    if(sample_depth<=depth):
+                        skip_row = True
 
         # writes the reordered rows to the new file
         if(not(skip_row)):
