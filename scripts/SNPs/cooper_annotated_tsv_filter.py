@@ -177,7 +177,18 @@ with open(input_file_name, 'r') as file_in, open(tsv_output_file_name, 'w') as f
         if(add_pop_max_src):
             dbs = {}
             for db in add_pop_max_src:
-                dbs[db] = row[db]
+                freq = row[db]
+                if '&' in freq:
+                    freqs = freq.split('&')
+                    freq = 0.0
+                    for i in range(0,len(freqs)):
+                        if((freqs[i] == '') | (freqs[i] == '-') | (freqs[i] == '.')):
+                            freqs[i] = '0.0'
+                        if(freq > float(freqs[i])):
+                            freq = float(freqs[i])
+                if((freq == '') | (freq == '-') | (freq == '.')):
+                    freq = '0.0'
+                dbs[db] = float(freq)
             max_db = max(dbs.items(), key=operator.itemgetter(1))[0]
             if(row[max_db]):
                 row["db_pop_freq_max"] = max_db
