@@ -36,7 +36,9 @@ output_name = args.output
 
 bams = dict(zip(samples, bam_paths))
 # load 'blank' xml
-tree = ET.ElementTree(file="blank.xml")
+script_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+print(script_dir + "/blank.xml")
+tree = ET.ElementTree(file=script_dir + "/blank.xml")
 root = tree.getroot()
 # add resource
 resources = root.find("Resources")
