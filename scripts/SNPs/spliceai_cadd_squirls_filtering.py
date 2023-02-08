@@ -26,7 +26,7 @@ parser.add_argument(
     help="spliceai score to filter with",
     action="store",
     type=float,
-    default="0.50",
+    default="0.5",
 )
 parser.add_argument(
     "--cadd-score",
@@ -34,7 +34,7 @@ parser.add_argument(
     help="cadd phred score to filter with",
     action="store",
     type=float,
-    default="1",
+    default="0",
 )
 parser.add_argument(
     "--squirls-score",
@@ -42,7 +42,7 @@ parser.add_argument(
     help="squirls score to filter with",
     action="store",
     type=float,
-    default="0.01",
+    default="0.5",
 )
 parser.add_argument(
     "--gnomad-frequency",
@@ -87,7 +87,7 @@ header = (
     ["CHROM", "POS", "REF", "ALT"]
     + reader.header.samples.names
     + spliceai_header
-    + ["max_delta", "gnomad_freq"]
+    + ["max_spliceai_delta", "gnomad_freq"]
     + ["CADD_PHRED"]
     + ["SQUIRLS_ALT", "SQUIRLS_TRANSCRIPTS", "SQUIRLS_SCORES", "MAX_SQUIRLS_SCORE"]
 )
@@ -95,20 +95,23 @@ with open(output_file_name, "w") as out:
     writer = csv.writer(out, delimiter="\t")
     writer.writerow(header)
     for record in reader:
-        spliceai_str = record.INFO.get("SpliceAI") or "NA"
-        cadd = record.INFO.get("CADD_PHRED") or "NA"
-        squirls_str = record.INFO.get("SQUIRLS_SCORE") or ["NA"]
-        if spliceai_str == "NA":
-            continue
-        gnomad = record.INFO.get(gnomad_field) or [0]
-        gnomad = gnomad[0]
-        if gnomad > gnomad_frequency:
-            continue
-        spliceai_vals = spliceai_str[0].split("|")
+        spliceai_str = record.INFO.get("SpliceAI") or -1
+        spliceai_vals = spliceai_str[0].split("|") if spliceai_str != -1 else ['alt','gene',-1,-1,-1,-1]
         max_delta = max(spliceai_vals[3:6])
         if float(max_delta) < spliceai_score:
             continue
-        if squirls_str[0] != "NA":
+
+        cadd = record.INFO.get("CADD_PHRED") or -1
+        if cadd < cadd_score:
+            continue
+
+        gnomad = record.INFO.get(gnomad_field) or [-1]
+        gnomad = gnomad[0]
+        if gnomad > gnomad_frequency:
+            continue
+
+        squirls_str = record.INFO.get("SQUIRLS_SCORE") or [-1]
+        if squirls_str[0] != -1:
             squirls_list = squirls_str[0].replace("=", "|").split("|")
             squirls_alt = squirls_list[0]
             squirls_transcripts = "|".join(squirls_list[1::2])
@@ -120,7 +123,7 @@ with open(output_file_name, "w") as out:
             squirls_alt = "NA"
             squirls_transcripts = "NA"
             squirls_scores = "NA"
-            max_squirls_score = 0
+            max_squirls_score = -1
         line = [record.CHROM, record.POS, record.REF]
         line += [alt.value for alt in record.ALT]
         line += [call.data.get("GT") or "./." for call in record.calls]
