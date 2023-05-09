@@ -29,14 +29,6 @@ parser.add_argument(
     default="0.5",
 )
 parser.add_argument(
-    "--cadd-score",
-    dest="cadd_score",
-    help="cadd phred score to filter with",
-    action="store",
-    type=float,
-    default="0",
-)
-parser.add_argument(
     "--squirls-score",
     dest="squirls_score",
     help="squirls score to filter with",
@@ -64,7 +56,6 @@ args = parser.parse_args()
 input_file_name = args.input
 output_file_name = args.output
 spliceai_score = args.spliceai_score
-cadd_score = args.cadd_score
 squirls_score = args.squirls_score
 gnomad_frequency = args.gnomad_frequency
 gnomad_field = args.gnomad
@@ -87,7 +78,7 @@ header = (
     ["CHROM", "POS", "REF", "ALT"]
     + reader.header.samples.names
     + spliceai_header
-    + ["max_spliceai_delta", "gnomad_freq"]
+    + ["max_spliceai_score", "gnomad_freq"]
     + ["CADD_PHRED"]
     + ["SQUIRLS_ALT", "SQUIRLS_TRANSCRIPTS", "SQUIRLS_SCORES", "MAX_SQUIRLS_SCORE"]
 )
@@ -95,40 +86,43 @@ with open(output_file_name, "w") as out:
     writer = csv.writer(out, delimiter="\t")
     writer.writerow(header)
     for record in reader:
-        spliceai_str = record.INFO.get("SpliceAI") or -1
-        spliceai_vals = spliceai_str[0].split("|") if spliceai_str != -1 else ['alt','gene',-1,-1,-1,-1]
-        max_delta = max(spliceai_vals[3:6])
-        if float(max_delta) < spliceai_score:
-            continue
+        cadd = record.INFO.get("CADD_PHRED") or "None"
 
-        cadd = record.INFO.get("CADD_PHRED") or -1
-        if cadd < cadd_score:
-            continue
-
-        gnomad = record.INFO.get(gnomad_field) or [-1]
+        gnomad = record.INFO.get(gnomad_field) or ["None"]
         gnomad = gnomad[0]
-        if gnomad > gnomad_frequency:
+        if gnomad == "None" or gnomad_frequency <= gnomad:
             continue
 
-        squirls_str = record.INFO.get("SQUIRLS_SCORE") or [-1]
-        if squirls_str[0] != -1:
+        squirls_alt = ""
+        squirls_transcripts = ""
+        squirls_scores = ""
+        max_squirls_score = ""
+
+        squirls_str = record.INFO.get("SQUIRLS_SCORE") or ["None"]
+        if squirls_str[0] != "None":
             squirls_list = squirls_str[0].replace("=", "|").split("|")
             squirls_alt = squirls_list[0]
             squirls_transcripts = "|".join(squirls_list[1::2])
             squirls_scores = "|".join(squirls_list[2::2])
             max_squirls_score = float(max(squirls_list[2::2]))
-            if max_squirls_score < squirls_score:
-                continue
-        else:
-            squirls_alt = "NA"
-            squirls_transcripts = "NA"
-            squirls_scores = "NA"
-            max_squirls_score = -1
+
+        spliceai_str = record.INFO.get("SpliceAI") or "None"
+        spliceai_vals = spliceai_str[0].split("|") if spliceai_str != "None" else ["","","","","","","","","",""]
+        max_spliceai_score = float(max(spliceai_vals[2:6])) if spliceai_str != "None" else ""
+        fail_spliceai = False
+        fail_squirls = False
+        if max_spliceai_score == "" or max_spliceai_score <= spliceai_score:
+            fail_spliceai = True
+        if max_squirls_score == "" or max_squirls_score <= squirls_score:
+            fail_squirls = True
+        if fail_spliceai and fail_squirls:
+            continue
+
         line = [record.CHROM, record.POS, record.REF]
         line += [alt.value for alt in record.ALT]
         line += [call.data.get("GT") or "./." for call in record.calls]
         line += spliceai_vals
-        line += [max_delta, gnomad]
+        line += [max_spliceai_score, gnomad]
         line += [cadd]
         line += [squirls_alt, squirls_transcripts, squirls_scores, max_squirls_score]
 
